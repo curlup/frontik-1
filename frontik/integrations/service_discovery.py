@@ -1,12 +1,14 @@
 import asyncio
-from consul import Check
-from consul.aio import Consul
-from frontik.integrations import Integration, integrations_logger
-from frontik.options import options
-from frontik.version import version
 import socket
 from asyncio import Future
 from typing import Optional
+
+from consul import Check
+from consul.aio import Consul
+
+from frontik.integrations import Integration, integrations_logger
+from frontik.options import options
+from frontik.version import version
 
 
 class ConsulIntegration(Integration):
@@ -26,7 +28,7 @@ class ConsulIntegration(Integration):
         self.service_id = f'{self.service_name}-{options.datacenter}-{host}-{options.port}'
 
         http_check = Check.http(
-            f'http://{host}:{options.port}/status',
+            f'http://{options.consul_check_host}:{options.port}/status',
             options.consul_http_check_interval_sec,
             timeout=options.consul_http_check_timeout_sec
         )
@@ -47,3 +49,9 @@ class ConsulIntegration(Integration):
 
     def initialize_handler(self, handler):
         handler.service_discovery = self.consul
+
+    def is_server_required(self) -> bool:
+        return True
+
+    def run_on_master_process_only(self) -> bool:
+        return True

@@ -3,7 +3,8 @@ import logging.handlers
 from tornado.options import define, options as tornado_options
 
 options = tornado_options
-
+define('master_process', default=True, type=bool)
+define('shutdown_exitcode', default=666, type=int)
 define('app', default=None, type=str)
 define('app_class', default=None, type=str)
 define('tornado_settings', default=None, type=dict)
