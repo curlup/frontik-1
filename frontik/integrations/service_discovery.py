@@ -29,8 +29,8 @@ class ConsulIntegration(Integration):
 
         http_check = Check.http(
             f'http://{options.consul_check_host}:{options.port}/status',
-            options.consul_http_check_interval_sec,
-            timeout=options.consul_http_check_timeout_sec
+            f'{options.consul_http_check_interval_sec}s',
+            timeout=f'{options.consul_http_check_timeout_sec}s'
         )
         # not supported by version 1.1.0
         meta = {'serviceVersion': version}
