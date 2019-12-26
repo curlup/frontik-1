@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import logging
 import os.path
@@ -154,29 +155,42 @@ def main(config_file=None):
         executor = ThreadPoolExecutor(options.common_executor_pool_size)
         ioloop.asyncio_loop.set_default_executor(executor)
 
-        def _async_init_cb():
+        def _await_server_start_cb(future):
             try:
-                init_futures = app.default_init_futures + list(app.init_async())
-
-                if init_futures:
-                    def await_init(future):
-                        if future.exception() is not None:
-                            log.error('failed to initialize application, init_async returned: %s', future.exception())
-                            sys.exit(1)
-
-                        run_server(app)
-
-                    ioloop.add_future(gen.multi(init_futures), await_init)
-                else:
-                    run_server(app)
+                if future.exception() is not None:
+                    if isinstance(future.exception(), ApplicationMustTerminateException):
+                        log.error('non-tolerable application failure: %s', future.exception())
+                        sys.exit(options.shutdown_exitcode)
+                    log.error('failed to initialize application, init_async returned: %s', future.exception())
+                    sys.exit(1)
 
             except Exception:
                 log.exception('failed to initialize application')
                 sys.exit(1)
-
-        ioloop.add_callback(_async_init_cb)
+        ioloop.add_future(asyncio.ensure_future(start_server(app, ioloop.asyncio_loop)), _await_server_start_cb)
         ioloop.start()
 
     except BaseException:
         log.exception('frontik application exited with exception')
         sys.exit(1)
+
+
+async def start_server(app, loop):
+    before_server_start_futures = app.init_before_server_start_futures + list(app.init_async())
+    await handle_init_futures(before_server_start_futures, loop)
+    run_server(app)
+    await handle_init_futures(app.init_after_server_start_futures, loop)
+
+
+async def handle_init_futures(init_futures, loop):
+    if init_futures:
+        exceptions = [ex for ex in await asyncio.gather(*init_futures, loop=loop, return_exceptions=True)
+                      if isinstance(ex, Exception)]
+        if exceptions:
+            raise next((e for e in exceptions if isinstance(e, ApplicationMustTerminateException)),
+                       default=exceptions[0])
+
+
+class ApplicationMustTerminateException(Exception):
+    def __init__(self, *args):
+        Exception.__init__(self, *args)
